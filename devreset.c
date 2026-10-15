@@ -8,8 +8,6 @@
 
 #define kExcAccMaxWait 5
 
-static IONotificationPortRef gNotificationPort;
-static io_iterator_t gDevIter;
 static mach_port_t gMachPort;
 
 void DeviceConnected (void *refCon, io_iterator_t iterator);
@@ -43,13 +41,17 @@ int main (int argc, char const *argv[])
   }
   CFDictionarySetValue(dict, CFSTR(kUSBVendorID), CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &vendorID));
   CFDictionarySetValue(dict, CFSTR(kUSBProductID), CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &productID));
-  gNotificationPort = IONotificationPortCreate(gMachPort);
-  kerr = IOServiceAddMatchingNotification(gNotificationPort, kIOFirstMatchNotification, dict, DeviceConnected, NULL, &gDevIter);
+  // IOServiceGetMatchingServices consumes dict and returns a snapshot of the
+  // devices matching now, so devices that come back after being re-enumerated
+  // are not picked up (and reset) again.
+  io_iterator_t iter;
+  kerr = IOServiceGetMatchingServices(gMachPort, dict, &iter);
   if (kerr != kIOReturnSuccess) {
-    fprintf(stderr, "IOServiceAddMatchingNotification\n");
+    fprintf(stderr, "IOServiceGetMatchingServices\n");
     exit(1);
   }
-  DeviceConnected(NULL, gDevIter);
+  DeviceConnected(NULL, iter);
+  IOObjectRelease(iter);
   mach_port_deallocate(mach_task_self(), gMachPort);
 
   return 0;
